@@ -9,17 +9,18 @@ from agents.mcp import MCPServerStdio, create_static_tool_filter
 
 def get_semgrep_server_params() -> Dict[str, Any]:
     """Get configuration parameters for the Semgrep MCP server."""
-    semgrep_app_token = os.getenv("SEMGREP_APP_TOKEN")
-
-    # Enhanced environment for debugging
-    env = {
-        "SEMGREP_APP_TOKEN": semgrep_app_token,
-        "PYTHONUNBUFFERED": "1",  # Ensure output is not buffered
-    }
-
+    # Build environment with proxy settings if available
+    env = os.environ.copy()
+    
+    # Ensure proxy variables are passed to uvx subprocess
+    for proxy_var in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY']:
+        if proxy_var in os.environ:
+            env[proxy_var] = os.environ[proxy_var]
+    
     return {
         "command": "uvx",
         "args": [
+            "--python", "3.12",  # Force Python 3.12 to avoid 3.14 protobuf issues
             "--with",
             "mcp==1.12.2",
             "--quiet",

@@ -12,12 +12,16 @@ from mcp_servers import create_semgrep_server
 
 load_dotenv()
 
+# Ensure OPENAI_BASE_URL is set for Azure OpenAI
+if not os.getenv("OPENAI_BASE_URL"):
+    os.environ["OPENAI_BASE_URL"] = "https://poc-arjun-oai.openai.azure.com/openai/v1"
+
 app = FastAPI(title="Cybersecurity Analyzer API")
 
 # Configure CORS for development and production
 cors_origins = [
-    "http://localhost:3000",    # Local development
-    "http://frontend:3000",     # Docker development
+    "http://localhost:5000",    # Local development
+    "http://frontend:5000",     # Docker development
 ]
 
 # In production, allow same-origin requests (static files served from same domain)
@@ -63,16 +67,18 @@ def validate_request(request: AnalyzeRequest) -> None:
 
 def check_api_keys() -> None:
     """Verify required API keys are configured."""
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENAI_API_KEY") and not os.getenv("AZURE_OPENAI_API_KEY"):
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
 
 def create_security_agent(semgrep_server) -> Agent:
     """Create and configure the security analysis agent."""
+    # Use the model deployment name from environment
+    model_name = os.getenv("MODEL_DEPLOYMENT", "gpt-5-mini")
     return Agent(
         name="Security Researcher",
         instructions=SECURITY_RESEARCHER_INSTRUCTIONS,
-        model="gpt-4.1-mini",
+        model=model_name,
         mcp_servers=[semgrep_server],
         output_type=SecurityReport,
     )
@@ -80,11 +86,18 @@ def create_security_agent(semgrep_server) -> Agent:
 
 async def run_security_analysis(code: str) -> SecurityReport:
     """Execute the security analysis workflow."""
-    with trace("Security Researcher"):
+    # Skip tracing if disabled (to avoid Azure/OpenAI platform conflicts)
+    if os.getenv("DISABLE_TRACING", "").lower() in ("true", "1", "yes"):
         async with create_semgrep_server() as semgrep:
             agent = create_security_agent(semgrep)
             result = await Runner.run(agent, input=get_analysis_prompt(code))
             return result.final_output_as(SecurityReport)
+    else:
+        with trace("Security Researcher"):
+            async with create_semgrep_server() as semgrep:
+                agent = create_security_agent(semgrep)
+                result = await Runner.run(agent, input=get_analysis_prompt(code))
+                return result.final_output_as(SecurityReport)
 
 
 def format_analysis_response(code: str, report: SecurityReport) -> SecurityReport:
@@ -108,6 +121,9 @@ async def analyze_code(request: AnalyzeRequest) -> SecurityReport:
         report = await run_security_analysis(request.code)
         return format_analysis_response(request.code, report)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error during analysis: {error_details}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 

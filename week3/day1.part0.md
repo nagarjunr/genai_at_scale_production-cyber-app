@@ -142,6 +142,16 @@ cd backend
 uv run server.py
 ```
 
+In corporate environment:
+```bash
+cd backend
+
+source .venv/bin/activate
+CACERT_PATH=$(.venv/bin/python -c "import certifi; print(certifi.where())") && export SSL_CERT_FILE="${CACERT_PATH}" && export REQUESTS_CA_BUNDLE="${CACERT_PATH}" && export CURL_CA_BUNDLE="${CACERT_PATH}" && echo "Using certificates from: ${CACERT_PATH}" && uv pip install semgrep
+
+uv run server.py
+```
+
 You should see output like:
 ```
 INFO:     Started server process [12345]
@@ -214,6 +224,12 @@ In a terminal at the project root:
 docker build -t cyber-analyzer .
 ```
 
+In corporate setting:
+
+```bash
+export PROXY="http://rb-proxy-na.bosch.com:8080" && docker build --build-arg http_proxy="$PROXY" --build-arg https_proxy="$PROXY" --build-arg HTTP_PROXY="$PROXY" --build-arg HTTPS_PROXY="$PROXY" -t cyber-analyzer .
+```
+
 This will take 2-5 minutes the first time as it:
 - Downloads base images
 - Installs Python dependencies
@@ -239,6 +255,11 @@ Breaking down this command:
 - `-p 8000:8000`: Map port 8000
 - `--env-file .env`: Load environment variables
 - `cyber-analyzer`: Image name
+
+In Corporate setup:
+```bash
+docker run --rm --name cyber-analyzer -p 8000:8000 -e http_proxy="http://rb-proxy-na.bosch.com:8080" -e https_proxy="http://rb-proxy-na.bosch.com:8080" -e HTTP_PROXY="http://rb-proxy-na.bosch.com:8080" -e HTTPS_PROXY="http://rb-proxy-na.bosch.com:8080" --env-file .env cyber-analyzer
+```
 
 You'll see the server startup logs:
 ```
